@@ -17,7 +17,7 @@ _project_root = os.path.join(os.path.dirname(__file__), '..', '..')
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from pilco_python.scenarios.cartPole.settings_cp import define_settings, get_matlab_rollout_data
+from pilco_python.scenarios.cartPole.settings_cp import define_settings, get_initial_rollout_data
 from pilco_python.base.rollout import rollout
 from pilco_python.base.trainDynModel import train_dyn_model
 from pilco_python.base.learnPolicy import learn_policy
@@ -157,11 +157,11 @@ def main(num_iterations=3, generate_gif_flag=True):
 
     # ── Phase 1: Initial random rollout (NO controller) ─────
     print("\n── Phase 1: Initial random rollout ──")
-    # Use MATLAB-verified rollout data to ensure deterministic GP training
-    xx_mat, yy_mat = get_matlab_rollout_data()
+    # Generate initial rollout with seed 1 (matching MATLAB rand('seed',1); randn('seed',1))
+    xx_mat, yy_mat = get_initial_rollout_data(plant, policy, cost, H, mu0, S0)
     x_data = xx_mat.copy()   # full 7-column augmented state
     y_data = yy_mat.copy()   # 4-column target differences
-    print(f"  Loaded {len(xx_mat)} steps of MATLAB-verified random rollout data")
+    print(f"  Loaded {len(xx_mat)} steps of random rollout data (seed=1)")
 
     # ── Phase 2: Initial GP training ────────────────────────
     print("\n── Phase 2: Train GP dynamics model ──")
@@ -239,4 +239,4 @@ def main(num_iterations=3, generate_gif_flag=True):
 
 
 if __name__ == '__main__':
-    main(num_iterations=3, generate_gif_flag=True)
+    main(num_iterations=5, generate_gif_flag=True)
