@@ -44,8 +44,8 @@ def calcCost(cost, M, S):
     # for each time step, compute the expected cost and its variance
     for h in range(H):
         L_val, d1, d2, SL_val = cost['fcn'](cost, M[:, h], S[:, :, h])
-        L[h] = L_val
-        SL[h] = SL_val
+        L[h] = L_val.item()
+        SL[h] = SL_val.item()
 
     sL = np.sqrt(SL)                                        # standard deviation
     return L, sL

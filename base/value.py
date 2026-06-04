@@ -112,7 +112,7 @@ def value(p, m0, S0, dynmodel, policy, plant, cost, H, compute_gradients=True):
             L_t = res_cost[0]
             dLdm = res_cost[1]
             dLdS = res_cost[2]
-            L[t] = (cost['gamma'] ** (t + 1)) * L_t                                      # discount
+            L[t] = ((cost['gamma'] ** (t + 1)) * L_t).item()
 
             dLdm_flat = dLdm.ravel()
             dLdS_flat = dLdS.ravel()
