@@ -208,7 +208,6 @@ def main(num_iterations=3, generate_gif_flag=True):
 
         if near_upright:
             print(f"\n  *** SWING-UP ACHIEVED at iteration {j + 1}! ***")
-            break
 
     # ── Phase 4: Generate animation GIF ─────────────────────
     if generate_gif_flag:
