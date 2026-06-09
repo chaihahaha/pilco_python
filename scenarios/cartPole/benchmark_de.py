@@ -15,8 +15,8 @@ from pilco_python.util.gSat import gSat
 from pilco_python.gp.train import train as gp_train
 from pilco_python.gp.gp1d import gp1d
 from pilco_python.base.value import value as pilco_value
-from pilco_python.base.cumulative_cost import distributional_cost_stats
-from pilco_python.base.directed_explore import ucb, gittins_index
+from pilco_python.base.value_de import value_de
+from pilco_python.base.analytical_variance import compute_trajectory_and_stats
 from pilco_python.util.minimize import minimize
 
 
@@ -26,15 +26,24 @@ def make_ctrl():
     return ctr
 
 
+def deep_copy_policy(pol):
+    return {
+        'maxU': pol['maxU'].copy(),
+        'fcn': pol['fcn'],
+        'p': {k: v.copy() for k, v in pol['p'].items()},
+    }
+
+
 def main():
     import warnings
     warnings.filterwarnings('ignore')
 
-    seed, n_eps = 42, 4
-    n_mc, n_cand, pert_scale, bfgs_iter = 40, 25, 0.15, 20
+    seed = 42
+    n_eps = 3
+    bfgs_iter = 12
+    trainOpt = [30, 0]
 
     np.random.seed(seed)
-    rng = np.random.default_rng(seed)
 
     s = define_settings()
     plant, cost, H = s['plant'], s['cost'], s['H']
@@ -45,104 +54,107 @@ def main():
     mu0Sim = np.zeros(len(dyno))
     S0Sim = np.diag([0.01] * len(dyno))
 
-    # Single random rollout for initial data
-    x_data = np.zeros((0, 7))
-    y_data = np.zeros((0, 4))
-    start = gaussian(mu0, S0)
-    xx, yy, _, _ = rollout(start, s['policy'], 10, plant, cost, compute_cost=False)
-    x_data = np.vstack([x_data, xx])
-    y_data = np.vstack([y_data, yy])
+    n_initial = 5
+    x_init = np.zeros((0, 7))
+    y_init = np.zeros((0, 4))
+    xx, yy, _, _ = rollout(gaussian(mu0, S0), s['policy'],
+                            n_initial, plant, cost, compute_cost=False)
+    x_init = np.vstack([x_init, xx])
+    y_init = np.vstack([y_init, yy])
 
-    trainOpt = [100, 100]
+    methods = ['PILCO', 'DE-GI', 'DE-UCB']
+    all_results = {}
 
-    results = {}
-    for method in ['PILCO', 'DE-UCB', 'DE-GI']:
-        print(f"\n{'='*50}\n  {method}\n{'='*50}")
-        pol = {'maxU': s['policy']['maxU'].copy(), 'fcn': make_ctrl(),
-               'p': {k: v.copy() for k, v in s['policy']['p'].items()}}
+    for mi, method in enumerate(methods):
+        print(f"\n{'='*60}\n  {method}  [{mi+1}/{len(methods)}]")
+        print(f"{'='*60}")
+
+        pol = deep_copy_policy(s['policy'])
+        pol['fcn'] = make_ctrl()
         dm = {'fcn': gp1d, 'train': gp_train, 'induce': np.zeros((30, 0, 1))}
-        dm = train_dyn_model(x_data, y_data, dm, s['policy'], plant, trainOpt)
-        xd, yd = x_data.copy(), y_data.copy()
-
-        costs, vars_arr = [], []
-        best_mu, best_var = 0.0, 0.0
-        t0_all = time.time()
+        dm = train_dyn_model(x_init.copy(), y_init.copy(), dm, s['policy'],
+                            plant, trainOpt)
+        xd = x_init.copy()
+        yd = y_init.copy()
+        real_costs = []
+        var_history = []
+        t_start = time.time()
 
         for ep in range(n_eps):
             t0 = time.time()
             ep_rem = n_eps - ep
             dm = train_dyn_model(xd, yd, dm, pol, plant, trainOpt)
 
-            opt = {'length': bfgs_iter, 'MFEPLS': 10, 'verbosity': 0}
+            bo_cfg = {
+                'enabled': method != 'PILCO',
+                'type': 'gi' if method == 'DE-GI' else 'ucb' if method == 'DE-UCB' else 'none',
+                'seed': ep * 1000 + 777,
+                'beta': 2.0,
+                'sigma_y': 0.5,
+                'E_remaining': ep_rem,
+                'use_var_grad': (method != 'PILCO'),
+                'vg_dirs': 2,
+            }
+
+            def bo_obj(p, m0, S0, dyn, pl, plt, cst, h,
+                       compute_gradients=True):
+                return value_de(p, m0, S0, dyn, pl, plt, cst, h,
+                               bo_config=bo_cfg,
+                               compute_gradients=compute_gradients)
+
+            opt = {'length': bfgs_iter, 'MFEPLS': 8, 'verbosity': 0}
             pol['p'], fX, _, _ = minimize(
-                pol['p'], pilco_value, opt,
+                pol['p'], bo_obj, opt,
                 mu0Sim, S0Sim, dm, pol, plant, cost, H)
-            best_mu = float(fX[-1])
+            best_val = float(fX[-1])
 
-            if method != 'PILCO':
-                best_bo = float('inf')
-                best_pol = pol
-                for c in range(n_cand):
-                    cand = {'maxU': pol['maxU'].copy(), 'fcn': pol['fcn'],
-                            'p': {k: v.copy() for k, v in pol['p'].items()}}
-                    for k in cand['p']:
-                        if isinstance(cand['p'][k], np.ndarray):
-                            cand['p'][k] += pert_scale * rng.standard_normal(cand['p'][k].shape)
-                    mu_c, var_c, _ = distributional_cost_stats(
-                        cand, plant, dm, cost, mu0Sim, S0Sim, H,
-                        n_samples=n_mc, seed=ep*1000+c)
-                    sigma_c = np.sqrt(var_c)
-                    bo = (ucb(mu_c, sigma_c, beta=1.5) if method=='DE-UCB' else
-                          gittins_index(mu_c, sigma_c, sigma_y=0.5, E_remaining=ep_rem))
-                    if bo < best_bo:
-                        best_bo, best_pol, best_mu, best_var = bo, cand, mu_c, var_c
-                pol = best_pol
-            else:
-                _, var_c, _ = distributional_cost_stats(
-                    pol, plant, dm, cost, mu0Sim, S0Sim, H,
-                    n_samples=n_mc, seed=ep*9999)
-                best_var = var_c
+            _, _, _, var_used, _ = compute_trajectory_and_stats(
+                pol['p'], mu0Sim, S0Sim, dm, pol, plant, cost, H)
+            var_history.append(var_used)
+            train_mu = pilco_value(pol['p'], mu0Sim, S0Sim, dm, pol, plant,
+                                  cost, H, compute_gradients=False)
 
-            vars_arr.append(best_var)
             xx_new, yy_new, rc, _ = rollout(
-                gaussian(mu0, S0), pol, H*2, plant, cost, compute_cost=True)
+                gaussian(mu0, S0), pol, H * 2, plant, cost, compute_cost=True)
             rc_sum = np.sum(rc)
             xd = np.vstack([xd, xx_new])
             yd = np.vstack([yd, yy_new])
-            costs.append(rc_sum)
+            real_costs.append(rc_sum)
+
             upright = np.any(np.abs(xx_new[:, 3] - np.pi) < 0.5)
             tr = [f'{xx_new[:,3].min():.1f}', f'{xx_new[:,3].max():.1f}']
-            print(f"  ep={ep+1}  cost={rc_sum:.1f}  μ={best_mu:.2f}  "
-                  f"σ²={best_var:.4f}  θ=[{tr[0]},{tr[1]}]  "
-                  f"{'UP!'if upright else'...'}  {time.time()-t0:.0f}s")
+            print(f"  ep={ep+1} real={rc_sum:.1f} μ={float(train_mu):.2f} "
+                  f"σ²={var_used:.4f} f={best_val:.3f} θ=[{tr[0]},{tr[1]}] "
+                  f"{'UP!' if upright else '...'} {time.time()-t0:.0f}s")
 
-        results[method] = {'costs': costs, 'vars': vars_arr,
-                          'time': time.time()-t0_all}
+        all_results[method] = {
+            'costs': real_costs, 'vars': var_history,
+            'time': time.time() - t_start,
+        }
+        print(f"  sum={sum(real_costs):.1f}  time={time.time()-t_start:.0f}s")
 
-    print("\n" + "=" * 70)
-    print("  RESULTS: PILCO vs Directed Exploration on CartPole")
-    print("  (sparse initial data, limited optimization)")
-    print("=" * 70)
-    for m in ['PILCO', 'DE-UCB', 'DE-GI']:
-        r = results[m]
-        cs = r['costs']
-        row = f"{m:<12} " + " ".join(f"{c:>7.1f}" for c in cs)
-        print(f"{row}  sum={sum(cs):.1f}  t={r['time']:.0f}s")
+    print("\n" + "=" * 80)
+    print("  RESULTS: PILCO vs DE (analytical variance + corrected gradient)")
+    print("=" * 80)
+    for m in methods:
+        cs = all_results[m]['costs']
+        vs = [f'{v:.4f}' for v in all_results[m]['vars']]
+        print(f"  {m:10s} costs={[f'{c:.1f}' for c in cs]}  "
+              f"sum={sum(cs):.1f}  vars={vs}")
 
-    print("-" * 70)
-    pilco_cs = results['PILCO']['costs']
-    for m in ['DE-UCB', 'DE-GI']:
-        cm = sum(results[m]['costs'])
+    pilco_cs = all_results['PILCO']['costs']
+    print("-" * 80)
+    for m in methods:
+        if m == 'PILCO':
+            continue
+        cm = sum(all_results[m]['costs'])
         cp = sum(pilco_cs)
-        pct = (cm - cp) / abs(cp) * 100
+        pct = (cm - cp) / max(abs(cp), 1) * 100
+        sgn = '+' if pct > 0 else ''
         w = 'BETTER!' if pct < 0 else 'worse'
-        print(f"  {m}: {cm:.1f} vs PILCO {cp:.1f} ({pct:+.1f}%) — {w}")
-
-    print("\n  Variance (model uncertainty) over episodes:")
-    for m in ['PILCO', 'DE-UCB', 'DE-GI']:
-        vs = [f'{v:.4f}' for v in results[m]['vars']]
-        print(f"  {m}: {vs}")
-    print("=" * 70)
+        print(f"  {m:10s} vs PILCO: {cm:.1f} vs {cp:.1f} "
+              f"({sgn}{pct:.1f}%) — {w}")
+    print("=" * 80)
 
 
 if __name__ == '__main__':
