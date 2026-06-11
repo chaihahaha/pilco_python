@@ -42,7 +42,7 @@ def predcost(m0, S, dynmodel, plant, policy, cost, H):
         Sk = S.copy()
         for t in range(H):
             m, Sk = plant['prop'](m, Sk, plant, dynmodel, policy)  # get next state
-            L_val, d1, d2, v = cost['fcn'](cost, m, Sk)             # compute cost
+            L_val, d1, d2, v, _, _ = cost['fcn'](cost, m, Sk)             # compute cost
             L[k, t] = L_val
             s[k, t] = np.sqrt(v)
 

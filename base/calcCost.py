@@ -43,7 +43,7 @@ def calcCost(cost, M, S):
 
     # for each time step, compute the expected cost and its variance
     for h in range(H):
-        L_val, d1, d2, SL_val = cost['fcn'](cost, M[:, h], S[:, :, h])
+        L_val, d1, d2, SL_val, _, _ = cost['fcn'](cost, M[:, h], S[:, :, h])
         L[h] = float(L_val)
         SL[h] = 0.0 if SL_val is None else float(SL_val)
 

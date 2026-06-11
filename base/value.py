@@ -39,7 +39,7 @@ from ..util.unwrap import unwrap
 from ..util.rewrap import rewrap
 
 
-def value(p, m0, S0, dynmodel, policy, plant, cost, H, compute_gradients=True):
+def value(p, m0, S0, dynmodel, policy, plant, cost, H, compute_gradients=True, return_var_grad=False):
     """
     Compute expected (discounted) cumulative cost for a given initial state distribution.
 
@@ -93,6 +93,7 @@ def value(p, m0, S0, dynmodel, policy, plant, cost, H, compute_gradients=True):
 
         dmOdp = np.zeros((m0.shape[0], len(p_flat)))
         dSOdp = np.zeros((m0.shape[0] * m0.shape[0], len(p_flat)))
+        dS2_flat = np.zeros_like(p_flat)
 
         for t in range(H):                                  # for all time steps in horizon
             result = plant['prop'](m, S, plant, dynmodel, policy, compute_derivatives=True)  # get next state
@@ -112,6 +113,8 @@ def value(p, m0, S0, dynmodel, policy, plant, cost, H, compute_gradients=True):
             L_t = res_cost[0]
             dLdm = res_cost[1]
             dLdS = res_cost[2]
+            s2dM = res_cost[4] if len(res_cost) > 4 else np.zeros_like(dLdm)
+            s2dS = res_cost[5] if len(res_cost) > 5 else np.zeros_like(dLdS)
             L[t] = ((cost['gamma'] ** (t + 1)) * L_t).item()
 
             dLdm_flat = dLdm.ravel()
@@ -119,13 +122,20 @@ def value(p, m0, S0, dynmodel, policy, plant, cost, H, compute_gradients=True):
             dp_flat = dp_flat + (cost['gamma'] ** (t + 1)) * \
                 (dLdm_flat @ dmdp_total + dLdS_flat @ dSdp_total)
 
+            s2dM_flat = s2dM.ravel()
+            s2dS_flat = s2dS.ravel()
+            dS2_flat = dS2_flat + (cost['gamma'] ** (t + 1)) * \
+                (s2dM_flat @ dmdp_total + s2dS_flat @ dSdp_total)
+
             dmOdp = dmdp_total.copy()
             dSOdp = dSdp_total.copy()                                 # bookkeeping
 
     J = np.sum(L)
     if compute_gradients:
-        # Use a copy to avoid rewrap modifying policy['p'] in place
         dJdp, _ = rewrap(policy['p'].copy() if isinstance(policy['p'], dict) else policy['p'], dp_flat)
+        if return_var_grad:
+            dS2dp, _ = rewrap(policy['p'].copy() if isinstance(policy['p'], dict) else policy['p'], dS2_flat)
+            return J, dJdp, dS2dp
         return J, dJdp
     else:
         return J

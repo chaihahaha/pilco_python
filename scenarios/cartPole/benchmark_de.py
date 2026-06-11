@@ -38,8 +38,8 @@ def main():
     import warnings
     warnings.filterwarnings('ignore')
 
-    seed = 42
-    n_eps = 3
+    seed = 43
+    n_eps = 4
     bfgs_iter = 12
     trainOpt = [30, 0]
 
@@ -93,7 +93,7 @@ def main():
                 'sigma_y': 0.5,
                 'E_remaining': ep_rem,
                 'use_var_grad': (method != 'PILCO'),
-                'vg_dirs': 2,
+                'vg_dirs': 3,
             }
 
             def bo_obj(p, m0, S0, dyn, pl, plt, cst, h,
@@ -108,7 +108,7 @@ def main():
                 mu0Sim, S0Sim, dm, pol, plant, cost, H)
             best_val = float(fX[-1])
 
-            _, _, _, var_used, _ = compute_trajectory_and_stats(
+            _, _, _, var_used = compute_trajectory_and_stats(
                 pol['p'], mu0Sim, S0Sim, dm, pol, plant, cost, H)
             var_history.append(var_used)
             train_mu = pilco_value(pol['p'], mu0Sim, S0Sim, dm, pol, plant,

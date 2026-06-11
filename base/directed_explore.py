@@ -78,12 +78,9 @@ def gittins_index(mu_c, sigma_c, sigma_y=1.0, E_remaining=10):
     if gamma <= 0.0:
         return mu_c
 
-    sigma_e = max(sigma_c, 1e-12)
-    s = sigma_e ** 2 / np.sqrt(max(sigma_e ** 2 + sigma_y ** 2, 1e-12))
-
     lambda_prime = _solve_gittins_lambda_prime(gamma)
 
-    gi_val = mu_c + lambda_prime * s
+    gi_val = mu_c + lambda_prime * sigma_c
     return gi_val
 
 
@@ -95,19 +92,12 @@ def gittins_index_with_grad(mu_c, sigma_c, sigma_y=1.0, E_remaining=10):
     if gamma <= 0.0:
         return mu_c, 1.0, 0.0
 
-    sigma_e = max(sigma_c, 1e-12)
-    sigma_e_sq = sigma_e ** 2
-    denom = np.sqrt(max(sigma_e_sq + sigma_y ** 2, 1e-12))
-    s = sigma_e_sq / denom
-
     lambda_prime = _solve_gittins_lambda_prime(gamma)
 
-    gi_val = mu_c + lambda_prime * s
-
-    d_s_d_sigma_e = (sigma_e_sq / 2.0 + sigma_y ** 2) * sigma_e / (denom ** 3) * 2.0
+    gi_val = mu_c + lambda_prime * sigma_c
 
     d_gi_d_mu = 1.0
-    d_gi_d_sigma = lambda_prime * d_s_d_sigma_e
+    d_gi_d_sigma = lambda_prime
 
     return gi_val, d_gi_d_mu, d_gi_d_sigma
 

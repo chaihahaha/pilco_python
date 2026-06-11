@@ -55,12 +55,13 @@ def dynamics_cdp(t, z, f=None, compute_energy=False):
     g  = 9.82  # [m/s^2]  acceleration of gravity
 
     if f is not None and not compute_energy:
+        f_val = float(np.asarray(f).ravel()[0])
 
         A = np.array([[2*(m1+m2+m3), -(m2+2*m3)*l2*np.cos(z[4]), -m3*l3*np.cos(z[5])],
                       [-(3*m2+6*m3)*np.cos(z[4]), (2*m2+6*m3)*l2, 3*m3*l3*np.cos(z[4]-z[5])],
                       [-3*np.cos(z[5]), 3*l2*np.cos(z[4]-z[5]), 2*l3]])
 
-        rhs = np.array([2*f - 2*b*z[1] - (m2+2*m3)*l2*z[2]**2*np.sin(z[4]) - m3*l3*z[3]**2*np.sin(z[5]),
+        rhs = np.array([2*f_val - 2*b*z[1] - (m2+2*m3)*l2*z[2]**2*np.sin(z[4]) - m3*l3*z[3]**2*np.sin(z[5]),
                         (3*m2+6*m3)*g*np.sin(z[4]) - 3*m3*l3*z[3]**2*np.sin(z[4]-z[5]),
                         3*l2*z[2]**2*np.sin(z[4]-z[5]) + 3*g*np.sin(z[5])])
 

@@ -130,6 +130,8 @@ def loss_cp(cost, m, s):
     dLdm = np.zeros((1, D0))
     dLds = np.zeros((1, D0 * D0))
     S2 = 0.0
+    dS2dm = np.zeros((1, D0))
+    dS2ds = np.zeros((1, D0 * D0))
     for i_idx in range(len(cw)):                    # scale mixture of immediate costs
         cost_sat = {'z': target, 'W': Q / cw[i_idx]**2}
         r, rdM, rdS, s2, s2dM, s2dS, _, _, _ = lossSat(cost_sat, M, S)
@@ -138,6 +140,8 @@ def loss_cp(cost, m, s):
         S2 = S2 + s2
         dLdm = dLdm + rdM.ravel()[np.newaxis, :] @ Mdm + rdS.ravel()[np.newaxis, :] @ Sdm
         dLds = dLds + rdM.ravel()[np.newaxis, :] @ Mds + rdS.ravel()[np.newaxis, :] @ Sds
+        dS2dm = dS2dm + s2dM.ravel()[np.newaxis, :] @ Mdm + s2dS.ravel()[np.newaxis, :] @ Sdm
+        dS2ds = dS2ds + s2dM.ravel()[np.newaxis, :] @ Mds + s2dS.ravel()[np.newaxis, :] @ Sds
 
         if b != 0 and abs(s2) > 1e-12:
             L = L + b * np.sqrt(s2)
@@ -150,5 +154,7 @@ def loss_cp(cost, m, s):
     dLdm = dLdm / n
     dLds = dLds / n
     S2 = S2 / n
+    dS2dm = dS2dm / n
+    dS2ds = dS2ds / n
 
-    return L, dLdm.ravel(), dLds.ravel(), S2
+    return L, dLdm.ravel(), dLds.ravel(), S2, dS2dm.ravel(), dS2ds.ravel()

@@ -101,6 +101,7 @@ def loss_cdp(cost, m, s, compute_derivatives=True):
 
     # 4. Calculate loss
     L = 0; dLdm = np.zeros((1, D0)); dLds = np.zeros((1, D0*D0)); S2 = 0
+    dS2dm = np.zeros((1, D0)); dS2ds = np.zeros((1, D0*D0))
 
     cw_arr = np.atleast_1d(cw)
     for ci in range(len(cw_arr)):
@@ -114,6 +115,8 @@ def loss_cdp(cost, m, s, compute_derivatives=True):
         S2 = S2 + s2
         dLdm = dLdm + rdM.ravel() @ Mdm + rdS.ravel() @ Sdm
         dLds = dLds + rdM.ravel() @ Mds + rdS.ravel() @ Sds
+        dS2dm = dS2dm + s2dM.ravel() @ Mdm + s2dS.ravel() @ Sdm
+        dS2ds = dS2ds + s2dM.ravel() @ Mds + s2dS.ravel() @ Sds
 
         b_val = float(b)
         if abs(b_val) > 0 and abs(s2) > 1e-12:
@@ -121,17 +124,14 @@ def loss_cdp(cost, m, s, compute_derivatives=True):
             dLdm = dLdm + b_val/np.sqrt(s2) * (s2dM.ravel() @ Mdm + s2dS.ravel() @ Sdm) / 2
             dLds = dLds + b_val/np.sqrt(s2) * (s2dM.ravel() @ Mds + s2dS.ravel() @ Sds) / 2
 
-    # normalize
     n = len(cw_arr)
-    L = L / n
-    dLdm = dLdm / n
-    dLds = dLds / n
-    S2 = S2 / n
+    L = L / n; dLdm = dLdm / n; dLds = dLds / n; S2 = S2 / n
+    dS2dm = dS2dm / n; dS2ds = dS2ds / n
 
     if not compute_derivatives:
-        return L, dLdm, dLds, S2
+        return L, dLdm, dLds, S2, dS2dm, dS2ds
 
-    return L, dLdm, dLds, S2
+    return L, dLdm, dLds, S2, dS2dm, dS2ds
 
 
 # Fill in covariance matrix...and derivatives ----------------------------

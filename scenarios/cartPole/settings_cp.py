@@ -30,7 +30,7 @@ def generate_initial_rollout(plant, policy, cost, H, mu0, S0):
     from pilco_python.util.gaussian import gaussian
     from pilco_python.base.rollout import rollout
 
-    np.random.seed(1)
+    np.random.seed(2)
 
     plant = plant.copy()
     plant['ctrl'] = 'zoh'  # required by simulate()
@@ -115,7 +115,7 @@ def define_settings():
     #   policy.p.hyp = log([1 1 1 0.7 0.7 1 0.01])';
     from pilco_python.util.gTrig import gTrig
 
-    np.random.seed(1)
+    np.random.seed(2)
 
     mm, ss, cc = gTrig(mu0, S0, plant['angi'], compute_derivatives=False)
     mm_full = np.concatenate([mu0, mm])
